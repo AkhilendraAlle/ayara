@@ -9,16 +9,20 @@
 <div id="reader" class="reader"></div>
 <div id="status" class="status">Tap “Start Camera”, then allow camera access.</div>
 <button id="startBtn" class="btn" onclick="startCamera()">📷 Start Camera</button>
-<div class="manual"><input id="manualCode" placeholder="Enter SKU / barcode"><button onclick="sendCode(document.getElementById('manualCode').value)">Use</button></div>
+<div class="manual"><input id="manualCode" placeholder="Enter SKU / barcode"><button onclick="sendCode(document.getElementById('manualCode').value)">Use</button></div><button class="btn" onclick="copyCode()">📋 Copy Scanned Value</button>
 <button class="btn" onclick="closeScanner()">Close</button>
 <div class="small">Use the scanner from the AYARA POS button. Camera access requires HTTPS and browser permission.</div>
 </div>
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script>
-let scanner=null,done=false,starting=false;const status=document.getElementById('status');const params=new URLSearchParams(location.search);const target=params.get('target')||'sale';
+let scanner=null,done=false,starting=false;const status=document.getElementById('status');const params=new URLSearchParams(location.search);const target=params.get('target')||'sale';const returnUrl=params.get('return')||'';
 function msg(t){status.textContent=t}
 function normalise(v){const raw=String(v||'').trim();if(!raw)return '';try{if(/^https?:\/\//i.test(raw)){const u=new URL(raw);return u.searchParams.get('sku')||u.searchParams.get('barcode')||u.searchParams.get('code')||raw}}catch(e){}return raw}
-function sendCode(v){const code=normalise(v);if(!code){msg('Enter a SKU or barcode.');return}if(done)return;done=true;try{if(scanner)scanner.stop().catch(()=>{})}catch(e){}if(window.opener&&!window.opener.closed){try{window.opener.postMessage({type:'AYARA_SCAN',code,target},'*')}catch(e){}msg('Scanned: '+code+'\nReturning to AYARA POS…');setTimeout(()=>window.close(),500)}else{msg('Scanned: '+code+'\nReturn to AYARA POS and enter this value manually.');done=false}}
+function sendCode(v){const code=normalise(v);if(!code){msg('Enter a SKU or barcode.');return}if(done)return;done=true;try{if(scanner)scanner.stop().catch(()=>{})}catch(e){}
+ msg('Scanned: '+code+'\nSending to AYARA POS…');
+ try{if(window.opener&&!window.opener.closed){window.opener.postMessage({type:'AYARA_SCAN',code,target},'*');setTimeout(()=>window.close(),700);return}}catch(e){}
+ if(returnUrl){try{const u=new URL(returnUrl);u.searchParams.set('ayara_scan',code);u.searchParams.set('scan_target',target);window.location.href=u.toString();return}catch(e){}}
+ const inp=document.getElementById('manualCode');inp.value=code;inp.select();navigator.clipboard?.writeText(code).catch(()=>{});msg('Scanned: '+code+'\nThe value has been copied. Return to AYARA POS.');done=false}
 async function startCamera(){if(starting||scanner)return;starting=true;document.getElementById('startBtn').disabled=true;msg('Requesting camera permission…');
  if(!window.isSecureContext){msg('Camera requires HTTPS. Open the GitHub Pages HTTPS address, not a file:// URL.');starting=false;document.getElementById('startBtn').disabled=false;return}
  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){msg('This browser does not expose camera access. Use current Chrome on Android/iPhone.');starting=false;document.getElementById('startBtn').disabled=false;return}
@@ -26,6 +30,7 @@ async function startCamera(){if(starting||scanner)return;starting=true;document.
  if(typeof Html5Qrcode==='undefined'){msg('Scanner library did not load. Check internet access and reload.');starting=false;document.getElementById('startBtn').disabled=false;return}
  scanner=new Html5Qrcode('reader');
  try{await scanner.start({facingMode:'environment'},{fps:12,qrbox:(w,h)=>({width:Math.min(300,Math.floor(w*.82)),height:Math.min(180,Math.floor(h*.42))}),formatsToSupport:[Html5QrcodeSupportedFormats.QR_CODE,Html5QrcodeSupportedFormats.CODE_128,Html5QrcodeSupportedFormats.CODE_39,Html5QrcodeSupportedFormats.EAN_13,Html5QrcodeSupportedFormats.EAN_8,Html5QrcodeSupportedFormats.UPC_A,Html5QrcodeSupportedFormats.UPC_E]},text=>sendCode(text),()=>{});msg('Camera ready. Point it at the barcode or QR code.')}catch(e){try{await scanner.clear()}catch(x){}scanner=null;msg('Camera opened but the scanner could not start. Try Chrome, allow camera permission, and reload.');document.getElementById('startBtn').disabled=false}finally{starting=false}}
+function copyCode(){const v=document.getElementById('manualCode').value.trim();if(!v)return;navigator.clipboard?.writeText(v).then(()=>msg('Copied: '+v)).catch(()=>{document.getElementById('manualCode').select();document.execCommand('copy');msg('Copied: '+v)})}
 function closeScanner(){try{if(scanner)scanner.stop().catch(()=>{})}catch(e){}window.close()}
 window.addEventListener('pagehide',()=>{try{if(scanner)scanner.stop().catch(()=>{})}catch(e){}});
 </script></body></html>
